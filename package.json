@@ -1,0 +1,20 @@
+{
+  "name": "appointment-api",
+  "version": "1.0.0",
+  "description": "An API that has a GET endpoint that returns avaible times for an appointment and a POST end point that allows people to add their availability  ",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HungryHorse/Appointment-API.git"
+  },
+  "author": "Jack Brewer",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/HungryHorse/Appointment-API/issues"
+  },
+  "homepage": "https://github.com/HungryHorse/Appointment-API#readme"
+}
