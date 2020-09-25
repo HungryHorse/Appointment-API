@@ -2,7 +2,9 @@ const http = require('http');
 const express = require('express');
 const app = express();
 const server = require('http').Server(app);
-const cryptoRandomString = require('crypto-random-string');const bodyParser = require('body-parser');
+const cryptoRandomString = require('crypto-random-string');
+const bodyParser = require('body-parser');
+const fs = require('fs');
 
 const PORT = 9000;
 
@@ -28,15 +30,29 @@ function genNewID() {
 	return cryptoRandomString({length: 22, type: 'alphanumeric'});
 }
 
-counsellorSchema.methods.addAvailability = function (dateTimes) {
+counsellorSchema.methods.addAvailability = function (passedDate) {
 	return new Promise(add => {
-		let newId = genNewID();
 
-		while(this.availability.includes({id: newId})){
-			newId = genNewID();
+		let dateTime = new Date(passedDate);
+
+		if (isNaN(dateTime.getTime())) {  
+			add('Invalid date');
+			return;
+  		}
+
+		if(this.availability.filter(e => e.datetime === dateTime).length > 0){
+			add('Availability already exists');
+			return;
 		}
 
-		this.availability.push({ "id": newId, "datetime": dateTimes });
+		let newId = genNewID();
+
+		while(this.availability.filter(e => e.id === newId).length > 0){
+  			newId = genNewID();
+		}
+
+		this.availability.push({ "id": newId, "datetime": dateTime.toISOString() });
+		this.save();
 
 		add('Added new availability');
 	});
@@ -44,18 +60,76 @@ counsellorSchema.methods.addAvailability = function (dateTimes) {
 
 const Counsellor = mongoose.model('Counsellor', counsellorSchema);
 
-const test = new Counsellor({
-    "counsellor_id": "79590113-a6a3-45c3-9d5e-28472a8c4a74",
-    "first_name": "Lettie",
-    "last_name": "Wolland",
-    "appointment_types": ["consultation", "one_off"],
-    "appointment_mediums": ["phone"],
-    "availability": [
-    {
-        "id": "88ZAQZbhu2Hf7CyVUmASLM",
-        "datetime": "2020-10-25T19:00:00.000Z"
-    }]
- });
+async function createNewCounsellor(counseller) {
+	let filter = { "counsellor_id": counseller.counsellor_id };
+
+	let update = {
+    	"first_name": counseller.first_name,
+    	"last_name": counseller.last_name,
+    	"appointment_types": counseller.appointment_types,
+    	"appointment_mediums": counseller.appointment_mediums,
+    	"availability": counseller.availability
+	}
+
+	let newCounsellor = await Counsellor.findOneAndUpdate(filter, update, {
+		new: true,
+		upsert: true,
+		useFindAndModify: false
+	});
+}
+
+function readInData(){
+	fs.readFile('data.json', 'utf8', function(err, data) {
+
+		let JSONdata = JSON.parse(data);
+
+    	for (let i = 0; i < JSONdata.length; i++) {
+    		createNewCounsellor(JSONdata[i]);
+    	}
+  	});
+}
+
+async function findCounsellorsByAppointmentTypeAndMedium(appointmentType, appointmentMedium){
+
+	let counsellors = await Counsellor.find();
+
+	for (var i = 0; i < counsellors.length; i++) {
+		if(!counsellors[i].appointment_types.includes(appointmentType)){
+			counsellors.splice(i, 1);
+			continue;
+		}
+		if(!counsellors[i].appointment_mediums.includes(appointmentMedium)){
+			counsellors.splice(i, 1);
+		}
+	}
+
+	return counsellors;
+}
+
+async function findAvailableDates(counsellor, startDate, endDate){
+	
+	let appointmentsBetweenDates = [];
+
+	for (var i = 0; i < counsellor.availability.length; i++) {
+
+		let date = new Date(counsellor.availability[i].datetime);
+
+		if(date.getTime() >= startDate.getTime() && date.getTime() <= endDate.getTime()){
+
+			appointmentsBetweenDates.push({
+				"counsellor_id": counsellor.counsellor_id,
+				"counsellor_name": counsellor.first_name + " " + counsellor.last_name,
+				"datetime": date.toString()
+			});
+		}
+	}
+
+	if(appointmentsBetweenDates.length > 1){
+		return appointmentsBetweenDates;
+	}
+}
+
+readInData();
 
 app.use(express.static('./'));
 app.use(express.json());
@@ -69,19 +143,49 @@ app.get('/', function(req,res){
 	res.send("Welcome to the appointment API");
 })
 
-app.get('/checkAvailability', function(req,res){
+app.get('/checkAvailability', async function(req,res){
 
 	let body = req.body;
-	let dateRange = body.date_range;
 	let appointmentType = body.appointment_type;
 	let appointmentMedium = body.appointment_medium;
 
-	dateRange = dateRange.split('-');
+	let startDate = new Date(body.start_date);
+	let endDate = new Date(body.end_date);
 
-	let startDate = dateRange[0];
-	let endDate = dateRange[1];
+	if (isNaN(startDate.getTime())) {  
+		res.status(422).send('Start date is not valid');
+		return;
+  	}
 
-	res.send({"Start Date":startDate, "End Date":endDate});
+  	if (isNaN(endDate.getTime())) {  
+		res.status(422).send('End date is not valid');
+		return;
+  	}
+
+	let potentialCounsellors = await findCounsellorsByAppointmentTypeAndMedium(appointmentType, appointmentMedium);
+	let potentialAppointments = [];
+
+	if(potentialCounsellors){
+		for (var i = 0; i < potentialCounsellors.length; i++) {
+
+			let potentialAppointment = await findAvailableDates(potentialCounsellors[i], startDate, endDate);
+
+			if(potentialAppointment){
+				potentialAppointments.push(potentialAppointment);				
+			}
+		}
+	}
+	else{
+		res.status(404).send('No appointment times matching these parameters have been found');
+		return;
+	}
+
+	if(potentialAppointments.length > 0){
+		res.send(potentialAppointments);
+	}
+	else{
+		res.status(404).send('No appointment times matching these parameters have been found');
+	}
 })
 
 app.post('/addAvailability',async function(req,res){
@@ -89,10 +193,23 @@ app.post('/addAvailability',async function(req,res){
 	let counsellorId = body.counsellor_id;
 	let dates = body.dates;
 
-	for (let i = 0; i < dates.length; i++) {
-		let addAvailable = await test.addAvailability(dates[i]);
-		console.log(addAvailable);
+	let test = await Counsellor.findOne({"counsellor_id": counsellorId});
+
+	if(!test){
+		res.status(404).send("Counsellor with id: " + counsellorId + " not found");
+		return;
 	}
 
-	res.send(test);
+	for (var i =  0; i < dates.length; i++) {
+
+		let addedAvailability = await test.addAvailability(dates[i]);
+
+		console.log(addedAvailability);
+		if(addedAvailability === "Invalid date"){
+			res.status(422).send("Date " + (i + 1) + " was invalid");
+			return;
+		}
+	}
+
+	res.status(200).send("All dates successfully added");
 })
