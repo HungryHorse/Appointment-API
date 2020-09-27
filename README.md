@@ -1,34 +1,42 @@
 # Booking Challenge
 
-## Background
+## Instructions for use
 
-Spill works with a lot of counsellors and users. Users can book sessions based on a variety of criteria.
+1. Download the repository.
+2. Enter the project directory from the command shell and run the command "npm install", this will install all the node dependancies.
+3. Once the dependacies are installed you can start the server locally by running the command "npm start" from the command shell.
+4. The server will start on local port 9000 and then connect to the database remotely (The database connection may take a short amount of time).
+5. Send commands to the end points with a request following the schema listed below with the data contained within the body of the request: 
+    1. GET "/checkAvailability":  
+    {
+      start_date : String,
+      end_date : String,
+      appointment_type : String,
+      appointment_medium : String
+    }
+    2. POST "/addAvailability":  
+    {
+      counsellor_id: String,
+      dates: [String],
+      save: Bool
+    }
 
-A subset of the factors that come into play are: availability, appointment type, appointment medium (phone/video). You will only need to concentrate on these factors for the challenge.
+6. You can start the test suite by running the command "npm test" from the command shell.
 
-## The Challenge
+## Technical Choices
 
-Build a Node.js API with multiple endpoints.
+### Stack
+For the creation of the API I used various different NPM packages, I used the packages becuase they are what is familar to me and have continuing and well documented support.
 
-- `GET` endpoint that given `date_range`, `appointment_type` and `appointment_medium` returns a selection of available appointment times.
-- `POST` endpoint that counsellors can use to add their availability. It should accept multiple `dates` and `times`.
+#### Database
+I used MongoDB for the database as that is the data base software that I have the most experience with. It also easily allows for free database hosting and I wanted to try remote hosting as a way to test myself and improve my skills overall.
 
-We have provided a json file with data.
+#### Testing Suite
+I used mocha and chai for my testing suite because once again this is the suit I am most familar with and it allows easy http endpoint testing.
 
-**Things to consider:**
+#### Coding descicions
+In my implimentation of the GET request end point I separated each potential error point into a specific send response. I did this to avoid unnecessary database calls as they are costly and would slow down response times imensily. By sperating the server responses invaild data not only sends a taliored message with the error code it also allows for very fast response times in the case of an error.  
 
-- schema structure
-- edge cases
-- testing
-- naming/readability
-- file structure
+By using a promise for the creation of new availability that returns a response string. This response string can then be processed easily by a switch case statement. The reason for this is it allows for the easy expansion of the response code base if new erorrs or responses need to be sent to the user of the API.
 
-## Requirements
-
-- [ ] duplicate this repo (do not fork it) please do not name your repo `Spill Coding Challenge` or anything similar - we don't want future applicants copying your code
-- [ ] create the API using Node.js according to the above specifications
-- [ ] you need to store the `data.json` file in a database
-- [ ] you **do not** need to host the API
-- [ ] write max `300` words in a markdown file in your repo on why you made the technical decisions you did
-- [ ] include instructions on how to run it locally including the database
-- [ ] send us a link to the repo (if the repo is private we will tell you who to add as a collaborator)
+When checking if counsellors are avaibale for the passed appointment type and medium the code removes them from the potential list. This means that garbage collection only needs to remove one list from data rather than the orignal list of found counsellors and the list of appropriate counsellors.
