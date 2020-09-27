@@ -33,6 +33,45 @@ const counsellorSchema = new mongoose.Schema({
 	availability: [{id: String, datetime: String}]
 })
 
+//This function checks the data passed into it and if accepted attempts to
+//add a date to the counsellors availability. If the data already exists
+//or the data is in the improper format the function returns an erorr string.
+counsellorSchema.methods.addAvailability = function (passedDate, save) {
+	return new Promise(add => {
+
+		let dateTime = new Date(passedDate);
+
+		if (isNaN(dateTime.getTime())) {  
+			add('Invalid date');
+			return;
+  		}
+
+		for (var i = 0; i < this.availability.length; i++) {
+
+			let dateToCheck = new Date(this.availability[i].datetime);
+
+			if(dateToCheck.getTime() == dateTime.getTime()){
+				add('Availability already exists');
+				return;
+			}
+		}
+
+		let newId = genNewID();
+
+		while(this.availability.filter(e => e.id === newId).length > 0){
+  			newId = genNewID();
+		}
+
+		this.availability.push({ "id": newId, "datetime": dateTime.toISOString() });
+
+		if(save){
+			this.save();
+		}
+
+		add('Added new availability');
+	});
+}
+
 //Initialisation of the model that stores counsellors
 const Counsellor = mongoose.model('Counsellor', counsellorSchema);
 
@@ -88,63 +127,30 @@ function genNewID() {
 	return cryptoRandomString({length: 22, type: 'alphanumeric'});
 }
 
-//This function checks the data passed into it and if accepted attempts to
-//add a date to the counsellors availability. If the data already exists
-//or the data is in the improper format the function returns an erorr string.
-counsellorSchema.methods.addAvailability = function (passedDate) {
-	return new Promise(add => {
-
-		let dateTime = new Date(passedDate);
-
-		if (isNaN(dateTime.getTime())) {  
-			add('Invalid date');
-			return;
-  		}
-
-		if(this.availability.filter(e => e.datetime === dateTime).length > 0){
-			add('Availability already exists');
-			return;
-		}
-
-		let newId = genNewID();
-
-		while(this.availability.filter(e => e.id === newId).length > 0){
-  			newId = genNewID();
-		}
-
-		this.availability.push({ "id": newId, "datetime": dateTime.toISOString() });
-		this.save();
-
-		add('Added new availability');
-	});
-}
-
 //This function finds and returns all dates and times that this counsellor is 
 //available between the given start and end date in the form of a js object array.
 //The object has properties for id, name and the date, this allows for a more readable output.   
-counsellorSchema.methods.findAvailableDates = function(startDate, endDate){
-	return new Promise(dates => {
+async function findAvailableDates(counsellor, startDate, endDate){
+	
+	let appointmentsBetweenDates = [];
 
-		let appointmentsBetweenDates = [];
+	for (var i = 0; i < counsellor.availability.length; i++) {
 
-		for (var i = 0; i < this.availability.length; i++) {
+		let date = new Date(counsellor.availability[i].datetime);
 
-			let date = new Date(this.availability[i].datetime);
+		if(date.getTime() >= startDate.getTime() && date.getTime() <= endDate.getTime()){
 
-			if(date.getTime() >= startDate.getTime() && date.getTime() <= endDate.getTime()){
-
-				appointmentsBetweenDates.push({
-					"counsellor_id": this.counsellor_id,
-					"counsellor_name": this.first_name + " " + this.last_name,
-					"datetime": date.toString()
-				});
-			}
+			appointmentsBetweenDates.push({
+				"counsellor_id": counsellor.counsellor_id,
+				"counsellor_name": counsellor.first_name + " " + counsellor.last_name,
+				"datetime": date.toString()
+			});
 		}
+	}
 
-		if(appointmentsBetweenDates.length > 1){
-			dates(appointmentsBetweenDates);
-		}
-	});
+	if(appointmentsBetweenDates.length > 1){
+		return appointmentsBetweenDates;
+	}
 }
 
 //Given an appointment type and appointment medium this function will return all
@@ -180,7 +186,7 @@ server.listen(PORT, function() {
     console.log("Server running at: http://localhost:" + PORT)
 });
 
-//Server entry entry point
+//Server entry point
 app.get('/', function(req,res){
 	res.send("Welcome to the appointment API");
 })
@@ -214,7 +220,7 @@ app.get('/checkAvailability', async function(req,res){
 	if(potentialCounsellors){
 		for (var i = 0; i < potentialCounsellors.length; i++) {
 
-			let potentialAppointment = await potentialCounsellors[i].findAvailableDates(startDate, endDate);
+			let potentialAppointment = await findAvailableDates(potentialCounsellors[i], startDate, endDate);
 
 			if(potentialAppointment){
 				potentialAppointments.push(potentialAppointment);				
@@ -222,7 +228,7 @@ app.get('/checkAvailability', async function(req,res){
 		}
 	}
 	else{
-		res.status(404).send('No appointment times matching these parameters have been found');
+		res.status(404).send('No counsellors with this both this type and medium have been found');
 		return;
 	}
 
@@ -238,6 +244,7 @@ app.post('/addAvailability',async function(req,res){
 	let body = req.body;
 	let counsellorId = body.counsellor_id;
 	let dates = body.dates;
+	let save = body.save;
 
 	let counsellor = await Counsellor.findOne({"counsellor_id": counsellorId});
 
@@ -248,13 +255,17 @@ app.post('/addAvailability',async function(req,res){
 
 	for (var i =  0; i < dates.length; i++) {
 
-		let addedAvailability = await counsellor.addAvailability(dates[i]);
+		let addedAvailability = await counsellor.addAvailability(dates[i], save);
 
 		//Logs the promise response from the addAvailability to the server console
 		console.log(addedAvailability);
 
 		if(addedAvailability === "Invalid date"){
 			res.status(422).send("Date " + (i + 1) + " was invalid");
+			return;
+		}
+		else if(addedAvailability === "Availability already exists"){
+			res.status(409).send("Availability already exists");
 			return;
 		}
 	}
