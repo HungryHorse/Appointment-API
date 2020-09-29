@@ -260,13 +260,15 @@ app.post('/addAvailability',async function(req,res){
 		//Logs the promise response from the addAvailability to the server console
 		console.log(addedAvailability);
 
-		if(addedAvailability === "Invalid date"){
-			res.status(422).send("Date " + (i + 1) + " was invalid");
-			return;
-		}
-		else if(addedAvailability === "Availability already exists"){
-			res.status(409).send("Availability already exists");
-			return;
+		switch(addedAvailability){
+			case "Invalid date":
+				res.status(422).send("Date " + (i + 1) + " was invalid");
+				return;
+			break;
+			case "Availability already exists":
+				res.status(409).send("Availability already exists");
+				return;
+			break;
 		}
 	}
 
