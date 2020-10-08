@@ -15,7 +15,7 @@ const PORT = 9000;
 	the data.json file.
 */
 
-mongoose.connect('mongodb+srv://JackBrewer:2ShHXqttQykzwUZ@appointment-api-cluster.xcvau.mongodb.net/appointment-api-cluster?retryWrites=true&w=majority', {useNewUrlParser: true, useUnifiedTopology: true});
+//mongoose.connect('*MongoDB URI goes here*', {useNewUrlParser: true, useUnifiedTopology: true});
 
 const db = mongoose.connection;
 db.on('error', console.error.bind(console, 'connection error:'));
